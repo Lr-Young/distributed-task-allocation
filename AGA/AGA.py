@@ -20,24 +20,24 @@ def sort_key_by_order(gene: Gene):
 
 def sort_cmp_by_target(gene1: Gene, gene2: Gene):
     if gene1.target_id_ < gene2.target_id_:
-        return 1
+        return -1
     if gene1.target_id_ == gene2.target_id_ and gene1.task_type_ < gene2.task_type_:
-        return 1
-    return -1
+        return -1
+    return 1
 
 
 def sort_cmp_by_agent(gene1: Gene, gene2: Gene):
     if gene1.agent_id_ < gene2.agent_id_:
-        return 1
+        return -1
     if gene1.agent_id_ == gene2.agent_id_ and gene1.order_ < gene2.agent_id_:
-        return 1
-    return -1
+        return -1
+    return 1
 
 
-class Chromesome:
-    genes_: list[Gene] = []
+class Chromesome(list):
 
     def __init__(self, target_num: int, target_type_num: int, US_list: list[int], UA_list: list[int]):
+        self.genes_: list[Gene] = []
         order_list = np.arange(target_num * target_type_num)
         target_id_list = [val for val in range(target_num) for _ in range(target_type_num)]
         task_type_list = [val for _ in range(target_num) for val in range(target_type_num)]
@@ -48,6 +48,15 @@ class Chromesome:
                 agent_id = np.random.choice(UA_list)
             self.genes_.append(Gene(order=order, target_id=target_id_list[index], task_type=task_type_list[index], agent_id=agent_id))
         self.sort_genes_by_order()
+
+    def __setitem__(self, index, item):
+        self.genes_[index] = item
+
+    def __getitem__(self, index):
+        return self.genes_[index]
+    
+    def __len__(self):
+        return len(self.genes_)
 
     def sort_genes_by_order(self):
         self.genes_.sort(key=sort_key_by_order)
@@ -66,3 +75,36 @@ def population_initialization(target_num: int, target_type_num: int, population_
         population.append(Chromesome(target_num=target_num, target_type_num=target_type_num, US_list=US_list, UA_list=UA_list))
     return population
 
+
+def crossover_chromesome(father: Chromesome, mother: Chromesome):
+    father.sort_genes_by_target()
+    mother.sort_genes_by_target()
+
+    gene_num = len(father)
+    [crossover_sites1, crossover_sites2] = np.random.choice(np.arange(gene_num + 1), 2, replace=False)
+    if crossover_sites1 > crossover_sites2:
+        tmp = crossover_sites1
+        crossover_sites1 = crossover_sites2
+        crossover_sites2 = tmp
+    tmp_agent_id_list = [gene.agent_id_ for gene in father.genes_]
+    for index in range(crossover_sites1, crossover_sites2):
+        father[index].agent_id_ = mother[index].agent_id_
+        mother[index].agent_id_ = tmp_agent_id_list[index]
+
+    father.sort_genes_by_order()
+    mother.sort_genes_by_order()
+    
+
+
+def crossover(parents: list[Chromesome], p: float) -> list[Chromesome]:
+    parents_len = len(parents)
+    for i in range(0, parents_len - 1, 2):
+        if np.random.rand() < p:
+            crossover_chromesome(parents[i], parents[i + 1])
+
+
+def test():
+    population = population_initialization(3, 3, 4, [1, 2], [3, 4])
+    crossover(population, 0.9)
+
+test()
