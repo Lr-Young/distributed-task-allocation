@@ -35,9 +35,18 @@ def sort_cmp_by_agent(gene1: Gene, gene2: Gene):
 
 
 class Chromesome(list):
+    target_num_: int
+    target_type_num_: int
+    US_list_: list[int]
+    UA_list_: list[int]
 
     def __init__(self, target_num: int, target_type_num: int, US_list: list[int], UA_list: list[int]):
         self.genes_: list[Gene] = []
+        self.target_num_ = target_num
+        self.target_type_num_ = target_type_num
+        self.US_list_ = US_list
+        self.UA_list_ = UA_list
+
         order_list = np.arange(target_num * target_type_num)
         target_id_list = [val for val in range(target_num) for _ in range(target_type_num)]
         task_type_list = [val for _ in range(target_num) for val in range(target_type_num)]
@@ -66,6 +75,18 @@ class Chromesome(list):
 
     def sort_genes_by_agent(self):
         self.genes_.sort(key=functools.cmp_to_key(sort_cmp_by_agent))
+
+    def __str__(self):
+        order_str =  "order:  "
+        target_str = "target: "
+        type_str =   "type:   "
+        agent_str =  "agent:  "
+        for gene in self.genes_:
+            order_str += str(gene.order_) + " "
+            target_str += str(gene.target_id_) + " "
+            type_str += str(gene.task_type_) + " "
+            agent_str += str(gene.agent_id_) + " "
+        return "Chromesome\n" + order_str + "\n" + target_str + "\n" + type_str + "\n" + agent_str + "\n"
     
 
 
@@ -103,8 +124,30 @@ def crossover(parents: list[Chromesome], p: float) -> list[Chromesome]:
             crossover_chromesome(parents[i], parents[i + 1])
 
 
+def mutate_chromesome_order_of_tasks(parent: Chromesome):
+    print(parent)
+    parent.sort_genes_by_target()
+    print(parent)
+    target_num_list = np.arange(parent.target_num_)
+    target_type_list = np.arange(parent.target_type_num_)
+    target_type_num = parent.target_type_num_
+    np.random.shuffle(target_num_list)
+    tmp_order_list = [gene.order_ for gene in parent.genes_]
+    index = 0
+    for target_num in target_num_list:
+        for offset in target_type_list:
+            parent[index].order_ = tmp_order_list[target_num * target_type_num + offset]
+            index += 1
+    print(parent)
+    parent.sort_genes_by_order()
+    print(parent)
+    a = 1
+
+
+
+
 def test():
-    population = population_initialization(3, 3, 4, [1, 2], [3, 4])
-    crossover(population, 0.9)
+    population = population_initialization(4, 3, 4, [1, 2], [3, 4])
+    mutate_chromesome_order_of_tasks(population[0])
 
 test()
