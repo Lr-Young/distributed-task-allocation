@@ -1,12 +1,17 @@
 import numpy as np
 import functools
 import math
-
+import heapq
+import matplotlib.pyplot as plt
+import gc
 
 class Position:
-    def __init__(self, x: float, y: float) -> None:
-        self.x_ = 0.0
-        self.y_ = 0.0
+    def __init__(self, x: float, y: float, random: bool=False) -> None:
+        self.x_ = x
+        self.y_ = y
+        if random:
+            self.x_ *= np.random.rand()
+            self.y_ *= np.random.rand()
     
     def distance_to(self, pos) -> float:
         return math.sqrt((self.x_ - pos.x_) ** 2 + (self.y_ - pos.y_) ** 2)
@@ -91,8 +96,9 @@ class Chromesome(list):
         for i in range(1, len(self)):
             if self[i - 1].agent_id_ != self[i].agent_id_:
                 times.append(time)
-                time = 0.0
-            time += self.time_from_target_to_target(self[i].agent_id_, self[i - 1].target_id_, self[i].target_id_)
+                time = self.time_from_agent_to_target(self[i].agent_id_, self[i].target_id_)
+            else:
+                time += self.time_from_target_to_target(self[i].agent_id_, self[i - 1].target_id_, self[i].target_id_)
         return max(times)
 
 
@@ -101,7 +107,7 @@ class Chromesome(list):
             / self.agent_velocities_[agent_id]
     
     def time_from_target_to_target(self, agent_id: int, target1_id: int, target2_id: int) -> float:
-        return self.agent_positions_[target1_id].distance_to(self.target_positions_[target2_id]) \
+        return self.target_positions_[target1_id].distance_to(self.target_positions_[target2_id]) \
             / self.agent_velocities_[agent_id]
     
     def copy(self):
@@ -111,7 +117,18 @@ class Chromesome(list):
         for gene in self.genes_:
             ans.append(gene.copy())
         return ans
-        
+    
+    def get_gene_set_by_agent(self) -> list[list[Gene]]:
+        res: list[list[Gene]] = []
+        self.sort_genes_by_agent()
+        res.append([self[0]])
+        for i in range(1, len(self)):
+            if(self[i - 1].agent_id_ == self[i].agent_id_):
+                res[len(res) - 1].append(self[i])
+            else:
+                res.append([self[i]])
+        self.sort_genes_by_order()
+        return res
 
     def __setitem__(self, index, item):
         self.genes_[index] = item
@@ -121,6 +138,12 @@ class Chromesome(list):
     
     def __len__(self):
         return len(self.genes_)
+    
+    def append(self, item: Gene):
+        if isinstance(item, Gene):
+            self.genes_.append(item)
+        else:
+            raise TypeError()
 
     def sort_genes_by_order(self):
         self.genes_.sort(key=sort_key_by_order)
@@ -149,111 +172,222 @@ class Chromesome(list):
     
 
 
-def population_initialization(target_num: int, target_type_num: int, population_size: int, US_list: list[int], UA_list: list[int]) -> list[Chromesome]:
+def population_initialization(target_num: int, target_type_num: int, population_size: int, US_list: list[int], UA_list: list[int], 
+                              agent_positions: list[Position], target_positions: list[Position], agent_velocities: list[float]) -> list[Chromesome]:
     population: list[Chromesome] = []
     for _ in range(population_size):
-        population.append(Chromesome(target_num=target_num, target_type_num=target_type_num, US_list=US_list, UA_list=UA_list))
+        population.append(Chromesome(target_num=target_num, target_type_num=target_type_num, US_list=US_list, UA_list=UA_list, 
+                                     agent_positions=agent_positions, target_positions=target_positions, agent_velocities=agent_velocities))
     return population
 
 
-def crossover_chromesome(father: Chromesome, mother: Chromesome):
-    father.sort_genes_by_target()
-    mother.sort_genes_by_target()
+def crossover_chromesome(father: Chromesome, mother: Chromesome) -> list[Chromesome]:
+    child1 = father.copy()
+    child2 = mother.copy()
+    child1.sort_genes_by_target()
+    child2.sort_genes_by_target()
 
-    gene_num = len(father)
+    gene_num = len(child1)
     [crossover_sites1, crossover_sites2] = np.random.choice(np.arange(gene_num + 1), 2, replace=False)
     if crossover_sites1 > crossover_sites2:
         tmp = crossover_sites1
         crossover_sites1 = crossover_sites2
         crossover_sites2 = tmp
-    tmp_agent_id_list = [gene.agent_id_ for gene in father.genes_]
+    tmp_agent_id_list = [gene.agent_id_ for gene in child1.genes_]
     for index in range(crossover_sites1, crossover_sites2):
-        father[index].agent_id_ = mother[index].agent_id_
-        mother[index].agent_id_ = tmp_agent_id_list[index]
+        child1[index].agent_id_ = child2[index].agent_id_
+        child2[index].agent_id_ = tmp_agent_id_list[index]
 
-    father.sort_genes_by_order()
-    mother.sort_genes_by_order()
+    child1.sort_genes_by_order()
+    child2.sort_genes_by_order()
+
+    return [child1, child2]
 
 
-def mutate_chromesome_order_of_tasks(parent: Chromesome):
-    parent.sort_genes_by_target()
-    target_index_list = np.arange(parent.target_num_)
-    target_type_list = np.arange(parent.target_type_num_)
-    target_type_num = parent.target_type_num_
+def mutate_chromesome_order_of_tasks(parent: Chromesome) -> Chromesome:
+    child = parent.copy()
+    child.sort_genes_by_target()
+    target_index_list = np.arange(child.target_num_)
+    target_type_list = np.arange(child.target_type_num_)
+    target_type_num = child.target_type_num_
     np.random.shuffle(target_index_list)
-    tmp_order_list = [gene.order_ for gene in parent.genes_]
+    tmp_order_list = [gene.order_ for gene in child.genes_]
     for index, target_index in enumerate(target_index_list):
         for offset in target_type_list:
-            parent[index].order_ = tmp_order_list[target_index * target_type_num + offset]
-    parent.sort_genes_by_order()
+            child[index].order_ = tmp_order_list[target_index * target_type_num + offset]
+    child.sort_genes_by_order()
+    return child
 
 
-def mutate_chromesome_task(parent: Chromesome):
-    parent.sort_genes_by_task()
-    target_num = parent.target_num_
-    mutation_site = np.random.choice(parent.target_type_num_)
+def mutate_chromesome_task(parent: Chromesome) -> Chromesome:
+    child = parent.copy()
+    child.sort_genes_by_task()
+    target_num = child.target_num_
+    mutation_site = np.random.choice(child.target_type_num_)
     in_target_agent_index_list = np.arange(target_num)
     np.random.shuffle(in_target_agent_index_list)
-    tmp_agent_list = [parent.genes_[mutation_site * target_num + i].agent_id_ for i in range(target_num)]
+    tmp_agent_list = [child.genes_[mutation_site * target_num + i].agent_id_ for i in range(target_num)]
     for index, agent_index in enumerate(in_target_agent_index_list):
-        parent[mutation_site * target_num + index].agent_id_ = tmp_agent_list[agent_index]
-    parent.sort_genes_by_order()
+        child[mutation_site * target_num + index].agent_id_ = tmp_agent_list[agent_index]
+    child.sort_genes_by_order()
+    return child
     
 
-def mutate_single_gene_agent(parent: Chromesome):
-    print(parent)
-    mutation_site = np.random.choice(len(parent))
-    print(mutation_site)
-    if parent[mutation_site].task_type_ == 1:
-        tmp_agent_list = [agent_id for agent_id in parent.UA_list_]
+def mutate_single_gene_agent(parent: Chromesome) -> Chromesome:
+    child = parent.copy()
+    mutation_site = np.random.choice(len(child))
+    if child[mutation_site].task_type_ == 1:
+        tmp_agent_list = [agent_id for agent_id in child.UA_list_]
     else:
-        tmp_agent_list = [agent_id for agent_id in parent.US_list_]
-    tmp_agent_list.remove(parent[mutation_site].agent_id_)
-    print(tmp_agent_list)
-    print("US list " + str(parent.US_list_))
-    print("UA list " + str(parent.UA_list_))
-    parent[mutation_site].agent_id_ = np.random.choice(tmp_agent_list)
-    print(parent)
+        tmp_agent_list = [agent_id for agent_id in child.US_list_]
+    tmp_agent_list.remove(child[mutation_site].agent_id_)
+    child[mutation_site].agent_id_ = np.random.choice(tmp_agent_list)
+    return child
 
 
 def crossover(parents: list[Chromesome], children_num: int) -> list[Chromesome]:
     parents_len = len(parents)
+    parity = parents_len % 2 == 1
     children: list[Chromesome] = []
     for i in range(0, parents_len - 1, 2):
-        crossover_chromesome(parents[i], parents[i + 1])
-        children.extend([parents[i], parents[i + 1]])
+        children.extend(crossover_chromesome(parents[i], parents[i + 1]))
         if len(children) >= children_num:
             break
-    del parents[:]  # to avoid memory leaking
+    if parity:
+        children.append(parents[len(parents) - 1].copy())
     return children
 
 
 def mutate(parents: list[Chromesome], children_num: int) -> list[Chromesome]:
-    parent = np.random.choice(parents)  # randomly select one parent chromesome
+    parent = parents[np.random.choice(len(parents))]  # randomly select one parent chromesome
     children: list[Chromesome] = []
     for _ in range(children_num):
         mutation_type = np.random.choice(3)
         if mutation_type == 0:
-            mutate_single_gene_agent(parent)
+            children.append(mutate_single_gene_agent(parent))
         elif mutation_type == 1:
-            mutate_chromesome_task(parent)
+            children.append(mutate_chromesome_task(parent))
         elif mutation_type == 2:
-            mutate_chromesome_order_of_tasks(parent)
-        children.append(parent)
-    del parents[:]  # to avoid memory leaking
+            children.append(mutate_chromesome_order_of_tasks(parent))
     return children
 
 
 def select(population: list[Chromesome]) -> list[Chromesome]:
     # double-pointer method to optimize the time complexity to nlogn
     child_population: list[Chromesome] = []
-    fitness = [individual.fitness() for individual in population]
-    fitness /= sum(fitness)
-    fitness = np.cumsum(fitness)
+    inverse_fitness = [1 / individual.fitness() for individual in population]
+    inverse_fitness_sum = sum(inverse_fitness)
+    fitness_probability = [val / inverse_fitness_sum for val in inverse_fitness]
+    fitness_probability = np.cumsum(fitness_probability)
+    random_probability = np.sort(np.random.rand(len(population)))
+    fitness_index = 0
+    random_index = 0
+    while fitness_index < len(fitness_probability) and random_index < len(random_probability):
+        if random_probability[random_index] < fitness_probability[fitness_index]:
+            child_population.append(population[fitness_index].copy())
+            random_index += 1
+        else:
+            fitness_index += 1
+    del population[:]
+    return child_population
 
+
+def elite_select(population: list[Chromesome], elite_num: int) -> list[Chromesome]:
+    fitness = [individual.fitness() for individual in population]
+    elite_indices = heapq.nsmallest(elite_num, range(len(fitness)), fitness.__getitem__)
+    return [population[elite_index].copy() for elite_index in elite_indices]
+
+
+def adaptive_evolve(target_num: int, target_type_num: int, population_size: int, elite_num: int, iteration_num: int, 
+                    US_list: list[int], UA_list: list[int], agent_positions: list[Position],target_positions: list[Position], 
+                    agent_velocities: list[float]) -> tuple[Chromesome, list[float], list[float]]:
+    population = population_initialization(target_num, target_type_num, population_size, 
+                                           US_list, UA_list, agent_positions, target_positions, agent_velocities)
+    avg_fitness_list = []
+    best_fitness_list = []
+    for iteration in range(iteration_num):
+        crossover_num = round((population_size - elite_num) * math.exp(-iteration / iteration_num))
+        mutation_num = population_size - elite_num - crossover_num
+
+        elite_parents = elite_select(population, elite_num)
+        population = select(population)
+        crossover_offspring = crossover(population, crossover_num)
+        mutation_offspring = mutate(population, mutation_num)
+        del population[:]
+        population.extend(elite_parents)
+        population.extend(crossover_offspring)
+        population.extend(mutation_offspring)
+
+        avg_fitness_list.append(sum([individual.fitness() for individual in population]) / population_size)
+        best_fitness_list.append(min([individual.fitness() for individual in population]))
+        gc.collect()
+    best_solution = min(population, key=lambda individual: individual.fitness())
+    return best_solution, avg_fitness_list, best_fitness_list
+
+
+def draw(solution: Chromesome, agent_positions: list[Position], target_positions: list[Position], agent_velocities: list[float], 
+         avg_fitness_list: list[float], best_fitness_list: list[float]) -> None:
+    x = range(len(avg_fitness_list))
+    plt.subplot(2, 2, 1)
+    plt.plot(x, avg_fitness_list)
+    plt.subplot(2, 2, 3)
+    plt.plot(x, best_fitness_list)
+    plt.subplot(2, 1, 2)
+    colors: list[tuple[float, float, float]] = [tuple([np.random.rand() for _ in range(3)]) for _ in range(len(agent_positions))]
+    target_x = []
+    target_y = []
+    for position in target_positions:
+        target_x.append(position.x_)
+        target_y.append(position.y_)
+    plt.scatter(target_x, target_y, c="black", marker='x')
+    for i, position in enumerate(agent_positions):
+        plt.scatter(position.x_, position.y_, c=colors[i])
+    for genes in solution.get_gene_set_by_agent():
+        agent_id = genes[0].agent_id_
+        trajectory_x = [agent_positions[agent_id].x_]
+        trajectory_y = [agent_positions[agent_id].y_]
+        trajectory_x.extend([target_positions[gene.target_id_].x_ for gene in genes])
+        trajectory_y.extend([target_positions[gene.target_id_].y_ for gene in genes])
+        distance = 0
+        for j in range(1, len(trajectory_x)):
+            distance += math.sqrt((trajectory_x[j] - trajectory_x[j - 1]) ** 2 + (trajectory_y[j] - trajectory_y[j - 1]) ** 2)
+        time = distance / agent_velocities[agent_id]
+        plt.legend()
+        plt.plot(trajectory_x, trajectory_y, label=f'Agent <{agent_id}, {agent_velocities[agent_id]}>: <{distance}, {time}>', c=colors[agent_id])
+
+    print(solution.fitness())
+    plt.show()
 
 def test():
-    population = population_initialization(5, 3, 4, [1, 2, 3, 4, 5, 6, 7, 8, 9], [11, 12, 13, 14, 15, 16, 17, 18, 19])
-    mutate_single_gene_agent(population[0])
+    target_num = 15
+    population_size = 100
+    elite_num = 4
+    iteration_num = 300
+    area_length = 10000
+    agent_positions: list[Position] = []
+    target_positions: list[Position] = []
+    agent_velocities: list[float] = []
+    agent_positions.append(Position(0, 0))  # agent_id: 0
+    agent_positions.append(Position(0, area_length))
+    agent_positions.append(Position(area_length, area_length))
+    agent_positions.append(Position(area_length, 0))
+    agent_positions.append(Position(0, area_length / 2))
+    agent_positions.append(Position(area_length / 2, area_length))
+    agent_positions.append(Position(area_length, area_length / 2))
+    agent_positions.append(Position(area_length / 2, 0))  # agent_id: 7
+    agent_velocities.append(70)
+    agent_velocities.append(80)
+    agent_velocities.append(90)
+    agent_velocities.append(100)
+    agent_velocities.append(60)
+    agent_velocities.append(70)
+    agent_velocities.append(80)
+    agent_velocities.append(90)
+    for _ in range(target_num):
+        target_positions.append(Position(area_length, area_length, True))
+    solution, avg_fitness_list, best_fitness_list = adaptive_evolve(target_num, 3, population_size, elite_num, iteration_num,
+                                 [0, 1, 2, 3], [4, 5, 6, 7], agent_positions, target_positions, agent_velocities)
+    draw(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
 
 
+test()
