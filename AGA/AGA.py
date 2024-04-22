@@ -246,13 +246,13 @@ def mutate_single_gene_agent(parent: Chromesome) -> Chromesome:
 
 
 def crossover(parents: list[Chromesome], children_num: int) -> list[Chromesome]:
+    selected_parent_index = np.random.choice(np.arange(len(parents)), children_num, replace=False)
+    parents = [parents[i] for i in selected_parent_index]
     parents_len = len(parents)
     parity = parents_len % 2 == 1
     children: list[Chromesome] = []
     for i in range(0, parents_len - 1, 2):
         children.extend(crossover_chromesome(parents[i], parents[i + 1]))
-        if len(children) >= children_num:
-            break
     if parity:
         children.append(parents[len(parents) - 1].copy())
     return children
@@ -273,18 +273,21 @@ def mutate(parents: list[Chromesome], children_num: int) -> list[Chromesome]:
 
 
 def select(population: list[Chromesome]) -> list[Chromesome]:
-    # double-pointer method to optimize the time complexity to nlogn
+    # Double-pointer method to optimize the time complexity to nlogn.
+    # Fitness values are linearly assigned between zero and one to the chromosomes of
+    # each generation based on a minimization objective.
     child_population: list[Chromesome] = []
-    inverse_fitness = [1 / individual.fitness() for individual in population]
-    inverse_fitness_sum = sum(inverse_fitness)
-    fitness_probability = [val / inverse_fitness_sum for val in inverse_fitness]
+    sorted_indices = sorted(range(len(population)), key=lambda index : population[index].fitness())
+    step = 1 / len(population)
+    fitness = np.arange(step, 1 + step, step)
+    fitness_probability = fitness / sum(fitness)
     fitness_probability = np.cumsum(fitness_probability)
     random_probability = np.sort(np.random.rand(len(population)))
     fitness_index = 0
     random_index = 0
     while fitness_index < len(fitness_probability) and random_index < len(random_probability):
         if random_probability[random_index] < fitness_probability[fitness_index]:
-            child_population.append(population[fitness_index].copy())
+            child_population.append(population[sorted_indices[fitness_index]].copy())
             random_index += 1
         else:
             fitness_index += 1
@@ -293,9 +296,8 @@ def select(population: list[Chromesome]) -> list[Chromesome]:
 
 
 def elite_select(population: list[Chromesome], elite_num: int) -> list[Chromesome]:
-    fitness = [individual.fitness() for individual in population]
-    elite_indices = heapq.nsmallest(elite_num, range(len(fitness)), fitness.__getitem__)
-    return [population[elite_index].copy() for elite_index in elite_indices]
+    elites = heapq.nsmallest(elite_num, population, lambda individual : individual.fitness())
+    return [elite.copy() for elite in elites]
 
 
 def adaptive_evolve(target_num: int, target_type_num: int, population_size: int, elite_num: int, iteration_num: int, 
@@ -321,7 +323,7 @@ def adaptive_evolve(target_num: int, target_type_num: int, population_size: int,
         avg_fitness_list.append(sum([individual.fitness() for individual in population]) / population_size)
         best_fitness_list.append(min([individual.fitness() for individual in population]))
         gc.collect()
-    best_solution = min(population, key=lambda individual: individual.fitness())
+    best_solution = min(population, key=lambda individual : individual.fitness())
     return best_solution, avg_fitness_list, best_fitness_list
 
 
@@ -332,7 +334,7 @@ def draw(solution: Chromesome, agent_positions: list[Position], target_positions
     plt.plot(x, avg_fitness_list)
     plt.subplot(2, 2, 3)
     plt.plot(x, best_fitness_list)
-    plt.subplot(2, 1, 2)
+    plt.subplot(1, 2, 2)
     colors: list[tuple[float, float, float]] = [tuple([np.random.rand() for _ in range(3)]) for _ in range(len(agent_positions))]
     target_x = []
     target_y = []
@@ -352,10 +354,9 @@ def draw(solution: Chromesome, agent_positions: list[Position], target_positions
         for j in range(1, len(trajectory_x)):
             distance += math.sqrt((trajectory_x[j] - trajectory_x[j - 1]) ** 2 + (trajectory_y[j] - trajectory_y[j - 1]) ** 2)
         time = distance / agent_velocities[agent_id]
-        plt.legend()
+        # plt.legend()
         plt.plot(trajectory_x, trajectory_y, label=f'Agent <{agent_id}, {agent_velocities[agent_id]}>: <{distance}, {time}>', c=colors[agent_id])
 
-    print(solution.fitness())
     plt.show()
 
 def test():
@@ -389,5 +390,3 @@ def test():
                                  [0, 1, 2, 3], [4, 5, 6, 7], agent_positions, target_positions, agent_velocities)
     draw(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
 
-
-test()
