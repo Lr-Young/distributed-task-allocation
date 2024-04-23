@@ -90,15 +90,13 @@ class Chromesome(list):
         self.sort_genes_by_order()
 
     def fitness(self) -> float:
-        self.sort_genes_by_agent()
         times = []
-        time = self.time_from_agent_to_target(self[0].agent_id_, self[0].target_id_)
-        for i in range(1, len(self)):
-            if self[i - 1].agent_id_ != self[i].agent_id_:
-                times.append(time)
-                time = self.time_from_agent_to_target(self[i].agent_id_, self[i].target_id_)
-            else:
-                time += self.time_from_target_to_target(self[i].agent_id_, self[i - 1].target_id_, self[i].target_id_)
+        gene_sets = self.get_gene_set_by_agent()
+        for genes in gene_sets:
+            time = self.time_from_agent_to_target(genes[0].agent_id_, genes[0].target_id_)
+            for i in range(1, len(genes)):
+                time += self.time_from_target_to_target(genes[0].agent_id_, genes[i - 1].target_id_, genes[i].target_id_)
+            times.append(time)
         return max(times)
 
 
@@ -277,7 +275,7 @@ def select(population: list[Chromesome]) -> list[Chromesome]:
     # Fitness values are linearly assigned between zero and one to the chromosomes of
     # each generation based on a minimization objective.
     child_population: list[Chromesome] = []
-    sorted_indices = sorted(range(len(population)), key=lambda index : population[index].fitness())
+    sorted_indices = sorted(range(len(population)), key=lambda index : population[index].fitness(), reverse=True)
     step = 1 / len(population)
     fitness = np.arange(step, 1 + step, step)
     fitness_probability = fitness / sum(fitness)
@@ -323,6 +321,7 @@ def adaptive_evolve(target_num: int, target_type_num: int, population_size: int,
         avg_fitness_list.append(sum([individual.fitness() for individual in population]) / population_size)
         best_fitness_list.append(min([individual.fitness() for individual in population]))
         gc.collect()
+        print(f"iteration {iteration}")
     best_solution = min(population, key=lambda individual : individual.fitness())
     return best_solution, avg_fitness_list, best_fitness_list
 
@@ -354,9 +353,7 @@ def draw(solution: Chromesome, agent_positions: list[Position], target_positions
         for j in range(1, len(trajectory_x)):
             distance += math.sqrt((trajectory_x[j] - trajectory_x[j - 1]) ** 2 + (trajectory_y[j] - trajectory_y[j - 1]) ** 2)
         time = distance / agent_velocities[agent_id]
-        # plt.legend()
         plt.plot(trajectory_x, trajectory_y, label=f'Agent <{agent_id}, {agent_velocities[agent_id]}>: <{distance}, {time}>', c=colors[agent_id])
-
     plt.show()
 
 def test():
@@ -388,5 +385,34 @@ def test():
         target_positions.append(Position(area_length, area_length, True))
     solution, avg_fitness_list, best_fitness_list = adaptive_evolve(target_num, 3, population_size, elite_num, iteration_num,
                                  [0, 1, 2, 3], [4, 5, 6, 7], agent_positions, target_positions, agent_velocities)
+    print(solution)
+    print(solution.fitness())
     draw(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
 
+
+def test_example():
+    target_num = 2
+    population_size = 100
+    elite_num = 4
+    iteration_num = 300
+    agent_positions: list[Position] = []
+    target_positions: list[Position] = []
+    agent_velocities: list[float] = []
+    agent_positions.append(Position(2500, 0))  # agent_id: 0
+    agent_positions.append(Position(2500, 0))
+    agent_positions.append(Position(2500, 0))
+    agent_velocities.append(70)
+    agent_velocities.append(80)
+    agent_velocities.append(70)
+    US_list = [0, 1]
+    UA_list = [1, 2]
+    target_positions.append(Position(1000, 3400))
+    target_positions.append(Position(4500, 4000))
+    solution, avg_fitness_list, best_fitness_list = adaptive_evolve(target_num, 3, population_size, elite_num, iteration_num,
+                                 US_list, UA_list, agent_positions, target_positions, agent_velocities)
+    print(solution)
+    print(solution.fitness())
+    draw(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
+
+test()
+# test_example()
