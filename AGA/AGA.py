@@ -359,6 +359,64 @@ def draw(solution: Chromesome, agent_positions: list[Position], target_positions
         plt.plot(trajectory_x, trajectory_y, label=f'Agent <{agent_id}, {agent_velocities[agent_id]}>: <{distance}, {time}>', c=colors[agent_id])
     plt.show()
 
+def draw_target_allocation(solution: Chromesome, agent_positions: list[Position], target_positions: list[Position], agent_velocities: list[float], 
+         avg_fitness_list: list[float], best_fitness_list: list[float]) -> None:
+    def min_sqrt_num(num: int) -> int:
+        res = 1
+        while res * res < num:
+            res += 1
+        return res
+
+    def interpolation(x1: float, y1: float, x2: float, y2: float, s: float) -> tuple[float, float]:
+        return (x1 + (x2 - x1) * s, y1 + (y2 - y1) * s)
+
+    agent_plt_rows = min_sqrt_num(len(agent_positions) + 1)
+    x = range(len(avg_fitness_list))
+    plt.subplot(2, agent_plt_rows + 1, 1)
+    plt.title("average fitness")
+    plt.plot(x, avg_fitness_list)
+    plt.subplot(2, agent_plt_rows + 1, agent_plt_rows + 2)
+    plt.title("best fitness")
+    plt.plot(x, best_fitness_list)
+
+    colors: list[tuple[float, float, float]] = [tuple([np.random.rand() for _ in range(3)]) for _ in range(len(agent_positions))]
+    target_x = []
+    target_y = []
+    for position in target_positions:
+        target_x.append(position.x_)
+        target_y.append(position.y_)
+    for genes in solution.get_gene_set_by_agent():
+        agent_id = genes[0].agent_id_
+        trajectory_x = [agent_positions[agent_id].x_]
+        trajectory_y = [agent_positions[agent_id].y_]
+        trajectory_x.extend([target_positions[gene.target_id_].x_ for gene in genes])
+        trajectory_y.extend([target_positions[gene.target_id_].y_ for gene in genes])
+        distance = 0
+        for j in range(1, len(trajectory_x)):
+            distance += math.sqrt((trajectory_x[j] - trajectory_x[j - 1]) ** 2 + (trajectory_y[j] - trajectory_y[j - 1]) ** 2)
+        time = distance / agent_velocities[agent_id]
+        plt.subplot(agent_plt_rows, agent_plt_rows + 1, agent_id // agent_plt_rows * (agent_plt_rows + 1) + 2 + agent_id % agent_plt_rows)
+        plt.title(f"Agent {agent_id}")
+        # plt.plot(trajectory_x, trajectory_y, label=f'Agent <{agent_id}, {agent_velocities[agent_id]}>: <{distance}, {time}>', c=colors[agent_id])
+        j = 1
+        for i in range(len(trajectory_x)):
+            if i == 0 or (trajectory_x[i - 1] == trajectory_x[i] and trajectory_y[i - 1] == trajectory_y[i]):
+                continue
+            plt.annotate("", xy=(trajectory_x[i], trajectory_y[i]), xytext=(trajectory_x[i - 1], trajectory_y[i - 1]), arrowprops=dict(arrowstyle='->', color=colors[agent_id]))
+            interpolation_x, interpolation_y = interpolation(trajectory_x[i - 1], trajectory_y[i - 1], trajectory_x[i], trajectory_y[i], 0.333)
+            plt.text(interpolation_x, interpolation_y, s=f'{j}')
+            j += 1
+        plt.scatter(target_x, target_y, c="black", marker='x')
+        plt.scatter(trajectory_x[0], trajectory_y[0], c=colors[agent_id])
+
+    plt.subplot(agent_plt_rows, agent_plt_rows + 1, agent_plt_rows ** 2 + agent_plt_rows)
+    for i, position in enumerate(target_positions):
+        plt.scatter(position.x_, position.y_, c='black', marker='x')
+        plt.text(position.x_ + 4, position.y_ + 4, s=f'{i}')
+    plt.show()
+
+    
+
 def test():
     target_num = 15
     population_size = 100
@@ -390,6 +448,7 @@ def test():
                                  [0, 1, 2, 3], [4, 5, 6, 7], agent_positions, target_positions, agent_velocities)
     print(solution)
     print(solution.fitness())
+    draw_target_allocation(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
     draw(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
 
 
@@ -417,5 +476,5 @@ def test_example():
     print(solution.fitness())
     draw(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
 
-# test()
-test_example()
+test()
+# test_example()
