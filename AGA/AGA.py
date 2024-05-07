@@ -330,10 +330,13 @@ def draw(solution: Chromesome, agent_positions: list[Position], target_positions
          avg_fitness_list: list[float], best_fitness_list: list[float]) -> None:
     x = range(len(avg_fitness_list))
     plt.subplot(2, 2, 1)
+    plt.title("average fitness")
     plt.plot(x, avg_fitness_list)
     plt.subplot(2, 2, 3)
+    plt.title("best fitness")
     plt.plot(x, best_fitness_list)
     plt.subplot(1, 2, 2)
+    plt.title("task allocation")
     colors: list[tuple[float, float, float]] = [tuple([np.random.rand() for _ in range(3)]) for _ in range(len(agent_positions))]
     target_x = []
     target_y = []
@@ -414,5 +417,5 @@ def test_example():
     print(solution.fitness())
     draw(solution, agent_positions, target_positions, agent_velocities, avg_fitness_list, best_fitness_list)
 
-test()
-# test_example()
+# test()
+test_example()
