@@ -428,16 +428,24 @@ def draw_target_allocation(solution: Chromesome, agent_positions: list[Position]
     plt.show()
 
 def test():
+    # 目标数量
     target_num = 15
+    # 种群大小
     population_size = 100
+    # 精英数量
     elite_num = 4
+    # 迭代次数
     total_iteration = 200
+    # 单个Agent的连续迭代次数
     iteration_unit = 25
+    # 共享池大小
     share_num = 5
+    # 区域范围
     area_length = 10000
     agent_positions: list[Position] = []
     target_positions: list[Position] = []
     agent_velocities: list[float] = []
+    # 智能体（机器人）的位置
     agent_positions.append(Position(0, 0))  # agent_id: 0
     agent_positions.append(Position(0, area_length))
     agent_positions.append(Position(area_length, area_length))
@@ -446,6 +454,7 @@ def test():
     agent_positions.append(Position(area_length / 2, area_length))
     agent_positions.append(Position(area_length, area_length / 2))
     agent_positions.append(Position(area_length / 2, 0))  # agent_id: 7
+    # 智能体（机器人）的速度
     agent_velocities.append(70)
     agent_velocities.append(80)
     agent_velocities.append(90)
@@ -454,6 +463,7 @@ def test():
     agent_velocities.append(70)
     agent_velocities.append(80)
     agent_velocities.append(90)
+    # 目标的位置
     for _ in range(target_num):
         target_positions.append(Position(area_length, area_length, True))
     solutions, avg_fitness_list, best_fitness_list = adaptive_co_evolve(target_num, 
@@ -518,5 +528,5 @@ def test_example():
     draw_fitness(avg_fitness_list, best_fitness_list)
     draw_target_allocation(best_solution, agent_positions, target_positions, agent_velocities)
 
-# test()
-test_example()
+test()
+# test_example()
